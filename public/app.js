@@ -96,6 +96,16 @@ firebase.initializeApp({
 // Initialize Cloud Firestore through Firebase
 var db = firebase.firestore();
 
+
+
+// let svg = document.getElementById('plantuml-svg');
+// console.log(svg);
+// svg.addEventListener("mousedown", e => {console.log(e)}, false);
+// svg.addEventListener("onmousedown", e => {console.log(e)}, false);
+// svg.addEventListener("mouse-down", e => {console.log(e)}, false);
+
+
+
 /*
  * Vuex Configuration
  */
@@ -103,12 +113,23 @@ var db = firebase.firestore();
 const store = new Vuex.Store({
   plugins: [createPersistedState()],
   state: {
-    image_url: "https://www.plantuml.com/plantuml/svg/SyfFKj2rKt3CoKnELR1Io4ZDoSa70000",
-    document: "@startuml\n@enduml",
+    image_url: "https://www.plantuml.com/plantuml/svg/",
+    plantuml_url: "https://us-central1-powerplantuml.cloudfunctions.net/app/v1/uml/",
+    include_url: "http://us-central1-powerplantuml.cloudfunctions.net/app/v1/uml/",
+    document: null,
+    name: null,
+    groups: {
+      available: [],
+      selected: 'xexSn6rPC0StrI3uUZEY'
+    },
+    repositories: {
+      available: [],
+      selected: 'EqV2TFjWApYkF2DUQ1ZK'
+    },
     documents: {
       available: [],
-      selected: 'TzwFK8y5MKJaXHHNO5go'
-    }
+      selected: null
+    },
   },
   mutations: {
     refreshImageUrl (state) {
@@ -122,36 +143,73 @@ const store = new Vuex.Store({
       this.commit('refreshImageUrl');
     },
     setSelectedDocument (state, document) {
-      state.document.body = document.body;
-      state.document.name = document.name;
-      this.commit('refreshImageUrl');
+      state.name = document.name;
+      this.commit('setSelectedDocumentBody', document.body);
     }
   },
   actions: {
     saveDocument (context) {
       this.commit('refreshImageUrl');
       // Save to Firestore
-      let docRef = db.collection('groups').doc('xexSn6rPC0StrI3uUZEY')
-        .collection('repositories').doc('EqV2TFjWApYkF2DUQ1ZK')
-        .collection('documents').doc('TzwFK8y5MKJaXHHNO5go');
+      let docRef = db.collection('groups').doc(context.state.groups.selected)
+        .collection('repositories').doc(context.state.repositories.selected)
+        .collection('documents').doc(context.state.documents.selected);
       docRef.set({
         image_url: context.state.image_url,
         body: context.state.document
       }, { merge: true });
     },
+    renameSelectedDocument (context, name) {
+      // TODO use mutation
+      context.state.document.name = name;
+      // TODO watch document, dont manually reload
+      
+      // Save new name to Firestore
+      let docRef = db.collection('groups').doc(context.state.groups.selected)
+        .collection('repositories').doc(context.state.repositories.selected)
+        .collection('documents').doc(context.state.documents.selected);
+      docRef.set({
+        name: name
+      }, { merge: true });
+    },
     setSelectedDocument (context, id) {
       context.commit('setSelectedDocumentId', id);
+      context.state.plantuml_url = 'https://us-central1-powerplantuml.cloudfunctions.net/app/v1/uml/' +
+        context.state.groups.selected + '/' +
+        context.state.repositories.selected + '/' +
+        context.state.documents.selected
+      context.state.include_url = 'http://us-central1-powerplantuml.cloudfunctions.net/app/v1/uml/' +
+        context.state.groups.selected + '/' +
+        context.state.repositories.selected + '/' +
+        context.state.documents.selected
       // Load content from Firestore
       context.dispatch('loadDocument', id);
     },
     loadDocument (context, document_id) {
-      let docRef = db.collection('groups').doc('xexSn6rPC0StrI3uUZEY')
-        .collection('repositories').doc('EqV2TFjWApYkF2DUQ1ZK')
+      let docRef = db.collection('groups').doc(context.state.groups.selected)
+        .collection('repositories').doc(context.state.repositories.selected)
         .collection('documents').doc(document_id);
       docRef.get().then(doc => {
-        this.commit('setSelectedDocumentBody', doc.data().body);
+        this.commit('setSelectedDocument', doc.data());
         this.commit('refreshImageUrl');
       });
+    },
+    loadDocumentList (context) {
+      // Load documents in this repository
+      let docCollectionRef = db.collection('groups').doc(context.state.groups.selected)
+        .collection('repositories').doc(context.state.repositories.selected)
+        .collection('documents');
+      docCollectionRef.get()
+        .then(snapshot => {
+          let docs = [];
+          snapshot.forEach(doc => {
+            docs.push({
+              id: doc.id,
+              name: doc.data().name
+            });
+          });
+          context.state.documents.available = docs;
+        });
     },
     newDocument (context) {
       let document = {
@@ -160,8 +218,8 @@ const store = new Vuex.Store({
       };
       this.commit('setSelectedDocument', document);
       // Save to Firestore to get id
-      let docCollectionRef = db.collection('groups').doc('xexSn6rPC0StrI3uUZEY')
-        .collection('repositories').doc('EqV2TFjWApYkF2DUQ1ZK')
+      let docCollectionRef = db.collection('groups').doc(context.state.groups.selected)
+        .collection('repositories').doc(context.state.repositories.selected)
         .collection('documents');
       docCollectionRef.add(document).then(docRef => {
         context.commit('setSelectedDocumentId', docRef.id);
@@ -177,7 +235,13 @@ var app = new Vue({
     return {
       is_logged_in: false,
       login_email: "",
-      login_password: ""
+      login_password: "",
+      rename_document_popup: {
+        visible: false,
+        name: null
+      },
+      // Vue Dragscroll
+      drag: true
     }
   },
   computed: {
@@ -205,17 +269,31 @@ var app = new Vue({
     newDocument () {
       this.$store.dispatch('newDocument');
     },
+    showRenameDocumentPopup () {
+      this.rename_document_popup.name = this.$store.state.name;
+      this.rename_document_popup.visible = true;
+    },
+    saveRenameDocumentPopup () {
+      this.$store.dispatch('renameSelectedDocument', this.rename_document_popup.name);
+      this.$store.dispatch('loadDocumentList');
+      this.rename_document_popup.name = null;
+      this.rename_document_popup.visible = false;
+    },
+    cancelRenameDocumentPopup () {
+      this.rename_document_popup.name = null;
+      this.rename_document_popup.visible = false;
+    },
     logInGoogle() {
       // Sign in with Google authentication provider
       var provider = new firebase.auth.GoogleAuthProvider();
-      firebase.auth().signInWithPopup(provider).then((result) => {
+      firebase.auth().signInWithPopup(provider).then(result => {
         // This gives you a Google Access Token. You can use it to access the Google API.
         var token = result.credential.accessToken;
         // The signed-in user info.
         var user = result.user;
         this.is_logged_in = true
       })
-      .catch((error) => {
+      .catch(error => {
         this.is_logged_in = false
         // Handle Errors here.
         var errorCode = error.code
@@ -249,6 +327,9 @@ var app = new Vue({
     logOut() {
       firebase.auth().signOut()
       // TODO clear all local user data
+    },
+    mouseDown (e) {
+      console.log(e);
     }
   },
   mounted () {
@@ -271,20 +352,7 @@ var app = new Vue({
         this.is_logged_in = false
       }
     });
-    // Load documents in this repository
-    let docCollectionRef = db.collection('groups').doc('xexSn6rPC0StrI3uUZEY')
-                             .collection('repositories').doc('EqV2TFjWApYkF2DUQ1ZK')
-                             .collection('documents');
-    docCollectionRef.get()
-      .then(snapshot => {
-        let docs = [];
-        snapshot.forEach(doc => {
-          docs.push({
-            id: doc.id, 
-            name: doc.data().name
-          });
-        });
-        this.$store.state.documents.available = docs;
-      });
+    this.$store.dispatch('loadDocumentList');
+    this.$store.dispatch('setSelectedDocument', 'TzwFK8y5MKJaXHHNO5go');
   }
 });
