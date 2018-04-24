@@ -34,48 +34,70 @@
 
   <div id="app">
     <v-app>
-      <v-content style="">
-        <v-container fluid fill-height style="height: 98vh;">
-          <v-layout row>
-            <v-flex>
-              <v-dialog
-                  persistent
-                  max-width="290"
-                  :value="!is_logged_in">
-                <v-card>
-                  <v-card-title>
-                    <span class="headline">Welcome To PowerPlantUML</span>
-                  </v-card-title>
-                  <v-card-text>
-                    You need to log in to use PowerPlantUML.
-                    <v-btn @click="logInGoogle">Log In with Google</v-btn>
-                    <v-text-field label="Email" v-model="login_email"></v-text-field>
-                    <v-text-field label="Password" v-model="login_password"></v-text-field>
-                    <v-btn @click="logInEmail">Log In</v-btn>
+      <v-content>
+        <v-container fluid fill-height style="height: 96vh;">
 
-                  </v-card-text>
-                </v-card>
-              </v-dialog>
-            </v-flex>
-          </v-layout>
+          <!-- Login modal popup -->
+          <v-dialog
+              persistent
+              max-width="290"
+              :value="!is_logged_in">
+            <v-card>
+              <v-card-title>
+                <span class="headline">Welcome To PowerPlantUML</span>
+              </v-card-title>
+              <v-card-text>
+                You need to log in to use PowerPlantUML.
+                <v-btn @click="logInGoogle">Log In with Google</v-btn>
+                <v-text-field label="Email" v-model="login_email"></v-text-field>
+                <v-text-field label="Password" v-model="login_password"></v-text-field>
+                <v-btn @click="logInEmail">Log In</v-btn>
+              </v-card-text>
+            </v-card>
+          </v-dialog>
+
           <v-layout row>
             <v-flex style="flex-grow: 0;">
-              <v-text-field class="plantuml-editor"
-                            textarea
-                            style=""
-                            v-model="$store.state.document"
-                            @keyup="keyWatcher">
-              </v-text-field>
+
+              <v-layout column>
+                <v-flex style="flex-grow: 0;">
+                  <v-layout row>
+                    <v-flex>
+                      <v-select
+                        :items="$store.state.documents.available"
+                        item-text="name"
+                        item-value="id"
+                        v-model="selectedDocument"
+                        label="Document"
+                        single-line>
+                      </v-select>
+                    </v-flex>
+                    <v-flex style="flex-grow: 0;">
+                      <v-btn @click="newDocument">New</v-btn>
+                    </v-flex>
+                  </v-layout>
+
+                </v-flex>
+                <v-flex>
+                  <v-text-field class="plantuml-editor"
+                    textarea
+                    v-model="$store.state.document"
+                    @keyup="keyWatcher">
+                  </v-text-field>
+                </v-flex>
+              </v-layout>
+
             </v-flex>
             <v-flex style="overflow: scroll;">
               <object :data="$store.state.image_url" type="image/svg+xml">
               </object>
             </v-flex>
           </v-layout>
-          <v-footer>
-            <a :href="$store.state.image_url">Link</a>
-          </v-footer>
+
         </v-container>
+        <v-footer>
+          <a :href="$store.state.image_url">Link</a>
+        </v-footer>
       </v-content>
     </v-app>
   </div>

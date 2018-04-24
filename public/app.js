@@ -53,6 +53,7 @@ function encode6bit(b) {
   return '?';
 }
 
+/*
 var deflater = window.SharedWorker && new SharedWorker('rawdeflate.js');
 if (deflater) {
   deflater.port.addEventListener('message', done_deflating, false);
@@ -61,16 +62,17 @@ if (deflater) {
   deflater = new Worker('rawdeflate.js');
   deflater.onmessage = done_deflating;
 }
+*/
 
-function done_deflating(e) {
-  // $('im').src = "http://www.plantuml.com/plantuml/img/"+encode64(e.data);
-  console.log('done deflating');
-}
+// function done_deflating(e) {
+//   // $('im').src = "http://www.plantuml.com/plantuml/img/"+encode64(e.data);
+//   console.log('done deflating');
+// }
 
 function compress (s) {
   // UTF8
   s = unescape(encodeURIComponent(s));
-  // Sync
+  // Sync. deflate() is defined in rawdeflate.js
   return deflate(s);
 }
 
@@ -102,26 +104,68 @@ const store = new Vuex.Store({
   plugins: [createPersistedState()],
   state: {
     image_url: "https://www.plantuml.com/plantuml/svg/SyfFKj2rKt3CoKnELR1Io4ZDoSa70000",
-    document: "@startuml\n@enduml"
+    document: "@startuml\n@enduml",
+    documents: {
+      available: [],
+      selected: 'TzwFK8y5MKJaXHHNO5go'
+    }
   },
   mutations: {
-    setDocument (state) {
+    refreshImageUrl (state) {
       state.image_url = 'https://www.plantuml.com/plantuml/svg/'+encodeUML(state.document);
     },
+    setSelectedDocumentId (state, document_id) {
+      state.documents.selected = document_id;
+    },
+    setSelectedDocumentBody (state, body) {
+      state.document = body;
+      this.commit('refreshImageUrl');
+    },
+    setSelectedDocument (state, document) {
+      state.document.body = document.body;
+      state.document.name = document.name;
+      this.commit('refreshImageUrl');
+    }
   },
   actions: {
     saveDocument (context) {
-      this.commit('setDocument');
-      
-      // Save to firestore
+      this.commit('refreshImageUrl');
+      // Save to Firestore
       let docRef = db.collection('groups').doc('xexSn6rPC0StrI3uUZEY')
         .collection('repositories').doc('EqV2TFjWApYkF2DUQ1ZK')
         .collection('documents').doc('TzwFK8y5MKJaXHHNO5go');
       docRef.set({
         image_url: context.state.image_url,
         body: context.state.document
+      }, { merge: true });
+    },
+    setSelectedDocument (context, id) {
+      context.commit('setSelectedDocumentId', id);
+      // Load content from Firestore
+      context.dispatch('loadDocument', id);
+    },
+    loadDocument (context, document_id) {
+      let docRef = db.collection('groups').doc('xexSn6rPC0StrI3uUZEY')
+        .collection('repositories').doc('EqV2TFjWApYkF2DUQ1ZK')
+        .collection('documents').doc(document_id);
+      docRef.get().then(doc => {
+        this.commit('setSelectedDocumentBody', doc.data().body);
+        this.commit('refreshImageUrl');
       });
-      
+    },
+    newDocument (context) {
+      let document = {
+        name: "New Document",
+        body: "@startuml\n@enduml"
+      };
+      this.commit('setSelectedDocument', document);
+      // Save to Firestore to get id
+      let docCollectionRef = db.collection('groups').doc('xexSn6rPC0StrI3uUZEY')
+        .collection('repositories').doc('EqV2TFjWApYkF2DUQ1ZK')
+        .collection('documents');
+      docCollectionRef.add(document).then(docRef => {
+        context.commit('setSelectedDocumentId', docRef.id);
+      });
     }
   }
 });
@@ -129,10 +173,24 @@ const store = new Vuex.Store({
 var app = new Vue({
   el: '#app',
   store,
-  data: {
-    is_logged_in: false,
-    login_email: "",
-    login_password: ""
+  data() {
+    return {
+      is_logged_in: false,
+      login_email: "",
+      login_password: ""
+    }
+  },
+  computed: {
+    selectedDocument: {
+      get () {
+        console.log('get', this.$store.state.documents.selected);
+        return this.$store.state.documents.selected;
+      },
+      set (value) {
+        console.log('set', value);
+        this.$store.dispatch('setSelectedDocument', value);
+      }
+    }
   },
   methods: {
     // Watches keypresses inside the plantuml-editor
@@ -144,6 +202,9 @@ var app = new Vue({
     saveDocument () {
       this.$store.dispatch('saveDocument');
     },
+    newDocument () {
+      this.$store.dispatch('newDocument');
+    },
     logInGoogle() {
       // Sign in with Google authentication provider
       var provider = new firebase.auth.GoogleAuthProvider();
@@ -152,8 +213,6 @@ var app = new Vue({
         var token = result.credential.accessToken;
         // The signed-in user info.
         var user = result.user;
-        // TODO document.getElementById('quickstart-oauthtoken').textContent = token;
-        console.log('quickstart-oauthtoken', token)
         this.is_logged_in = true
       })
       .catch((error) => {
@@ -165,7 +224,7 @@ var app = new Vue({
         var email = error.email
         // The firebase.auth.AuthCredential type that was used.
         var credential = error.credential
-        if (errorCode === 'auth/accou0nt-exists-with-different-credential') {
+        if (errorCode === 'auth/account-exists-with-different-credential') {
           // TODO no alerts!
           alert('You have already signed up with a different auth provider for that email.')
           // If you are using multiple auth providers on your app you should handle linking
@@ -211,6 +270,21 @@ var app = new Vue({
         // No user is signed in.
         this.is_logged_in = false
       }
-    })
+    });
+    // Load documents in this repository
+    let docCollectionRef = db.collection('groups').doc('xexSn6rPC0StrI3uUZEY')
+                             .collection('repositories').doc('EqV2TFjWApYkF2DUQ1ZK')
+                             .collection('documents');
+    docCollectionRef.get()
+      .then(snapshot => {
+        let docs = [];
+        snapshot.forEach(doc => {
+          docs.push({
+            id: doc.id, 
+            name: doc.data().name
+          });
+        });
+        this.$store.state.documents.available = docs;
+      });
   }
 });
