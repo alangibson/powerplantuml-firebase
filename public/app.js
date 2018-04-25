@@ -104,8 +104,6 @@ var db = firebase.firestore();
 // svg.addEventListener("onmousedown", e => {console.log(e)}, false);
 // svg.addEventListener("mouse-down", e => {console.log(e)}, false);
 
-
-
 /*
  * Vuex Configuration
  */
@@ -120,11 +118,11 @@ const store = new Vuex.Store({
     name: null,
     groups: {
       available: [],
-      selected: 'xexSn6rPC0StrI3uUZEY'
+      selected: null
     },
     repositories: {
       available: [],
-      selected: 'EqV2TFjWApYkF2DUQ1ZK'
+      selected: null
     },
     documents: {
       available: [],
@@ -148,6 +146,11 @@ const store = new Vuex.Store({
     }
   },
   actions: {
+    setGroupAndRepositoryByIds (context, { group_id, repository_id }) {
+      console.log('setGroupAndRepositoryByIds', group_id, repository_id);
+      context.state.groups.selected = group_id;
+      context.state.repositories.selection = repository_id;
+    },
     saveDocument (context) {
       this.commit('refreshImageUrl');
       // Save to Firestore
@@ -352,7 +355,12 @@ var app = new Vue({
         this.is_logged_in = false
       }
     });
+    // Parse url after hash to extract group and repository ids
+    let splitHash = window.location.hash.split('#')[1].split('/');
+    let [group_id, repository_id, document_id] = splitHash;
+    this.$store.dispatch('setGroupAndRepositoryByIds', { group_id, repository_id });
+    this.$store.dispatch('setSelectedDocument', document_id);
+    // Load list of documents from Firestore
     this.$store.dispatch('loadDocumentList');
-    this.$store.dispatch('setSelectedDocument', 'TzwFK8y5MKJaXHHNO5go');
   }
 });
