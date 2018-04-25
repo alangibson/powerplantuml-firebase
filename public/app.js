@@ -147,9 +147,16 @@ const store = new Vuex.Store({
   },
   actions: {
     setGroupAndRepositoryByIds (context, { group_id, repository_id }) {
-      console.log('setGroupAndRepositoryByIds', group_id, repository_id);
+      // TODO use mutation
       context.state.groups.selected = group_id;
       context.state.repositories.selection = repository_id;
+    },
+    setGroupRepositoryDocumentByIds (context, { group_id, repository_id, document_id }) {
+      // TODO use mutation
+      context.state.groups.selected = group_id;
+      context.state.repositories.selected = repository_id;
+      // context.state.documents.selected = document_id;
+      context.dispatch('setSelectedDocument', document_id);
     },
     saveDocument (context) {
       this.commit('refreshImageUrl');
@@ -166,7 +173,6 @@ const store = new Vuex.Store({
       // TODO use mutation
       context.state.document.name = name;
       // TODO watch document, dont manually reload
-      
       // Save new name to Firestore
       let docRef = db.collection('groups').doc(context.state.groups.selected)
         .collection('repositories').doc(context.state.repositories.selected)
@@ -250,12 +256,15 @@ var app = new Vue({
   computed: {
     selectedDocument: {
       get () {
-        console.log('get', this.$store.state.documents.selected);
         return this.$store.state.documents.selected;
       },
       set (value) {
-        console.log('set', value);
         this.$store.dispatch('setSelectedDocument', value);
+        // Update window.location.hash
+        window.location.hash = '#' +
+          this.$store.state.groups.selected + '/' +
+          this.$store.state.repositories.selected + '/' +
+          this.$store.state.documents.selected;
       }
     }
   },
@@ -358,8 +367,8 @@ var app = new Vue({
     // Parse url after hash to extract group and repository ids
     let splitHash = window.location.hash.split('#')[1].split('/');
     let [group_id, repository_id, document_id] = splitHash;
-    this.$store.dispatch('setGroupAndRepositoryByIds', { group_id, repository_id });
-    this.$store.dispatch('setSelectedDocument', document_id);
+    console.log(group_id, repository_id, document_id);
+    this.$store.dispatch('setGroupRepositoryDocumentByIds', { group_id, repository_id, document_id });
     // Load list of documents from Firestore
     this.$store.dispatch('loadDocumentList');
   }
